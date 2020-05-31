@@ -1,0 +1,87 @@
+import zipfile
+from zipfile import ZipFile
+from PIL import Image
+from PIL import ImageDraw
+import pytesseract
+import cv2 as cv
+import numpy as np
+
+# loading the face detection classifier
+face_cascade = cv.CascadeClassifier(cv.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+images = []
+filenames = []
+with ZipFile('small_img.zip') as myzipfile:
+    for entry in myzipfile.infolist():
+        filenames.append(entry.filename)
+        with myzipfile.open(entry) as file:
+            img = Image.open(file)
+            img = img.convert('RGB')
+            images.append(img)
+
+#define a function to crop all faces and paste onto a contact sheet
+#3 inputs: faces numpy array generated from opencv, the desired width/height of each face/image on the contact sheet
+# and number of faces per row on the contact sheet
+def get_faces(img, displaysize, imgperrow):
+    
+    imggray = img.convert('L')
+    imgcv = np.asarray(imggray)
+    imgcvbi = cv.threshold(imgcv, 180, 255, cv.THRESH_BINARY)[1]
+    myfaces = face_cascade.detectMultiScale(imgcvbi)
+    #myfaces = face_cascade.detectMultiScale(imgcv, 1.05)
+    
+    # if myfaces is empty, stop
+    if len(myfaces)<1:
+        return myfaces
+    else:
+        # crop faces
+        allfaces = []
+        for face in myfaces:
+            a, b, w, h = face
+            #if w <= displaysize:
+            #    newimg = img.crop((a, b, a+w, b+h))
+            #elif w > displaysize:
+            newimg = img.crop((a, b, a+w, b+h))
+            newimg = newimg.resize((displaysize, displaysize))
+            allfaces.append(newimg)
+        # build contact sheet
+        if len(allfaces) % imgperrow == 0:
+             contact_sheet=Image.new('RGB', (displaysize*imgperrow, displaysize*(int(len(allfaces)/imgperrow)) ))
+        else:
+            contact_sheet=Image.new('RGB', (displaysize*imgperrow, displaysize*(int(len(allfaces)/imgperrow) + 1)))
+        x=0
+        y=0
+        for item in allfaces:
+            contact_sheet.paste(item, (x, y))
+            if x + displaysize == contact_sheet.width:
+                x = 0
+                y = y + displaysize
+            else:
+                x = x + displaysize
+        #print("{} images detected.".format(len(myfaces)))
+        return contact_sheet
+        #display(contact_sheet)
+
+### start building a dictionary that contains both text and faces
+mydata = []
+    
+for image, filename in zip(images, filenames):
+    
+    #get faces
+    allfaces = get_faces(image, 200, 5)
+    
+    #get text
+    text = pytesseract.image_to_string(imggray)
+    
+    #append to list
+    mydata.append((text, allfaces, filename))
+
+###########################################################################
+# if text found, return faces, if no faces detected, return default string
+for text, face, filename in mydata:
+    if 'Mark' in text:
+        if face:
+            display(face)
+            print("Results found in file {}".format(filename))
+        else:
+            print("But there were no faces in that file")
