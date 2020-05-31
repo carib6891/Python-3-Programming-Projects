@@ -1,0 +1,67 @@
+
+# some invocations that we use in the automated tests; uncomment these if you are getting errors and want better error messages
+# get_sorted_recommendations(["Bridesmaids", "Sherlock Holmes"])
+import requests_with_caching
+
+# get related movies
+def get_movies_from_tastedive(movie):
+    baseurl = 'https://tastedive.com/api/similar'
+    para={}
+    para['q'] = movie
+    para['type'] = 'movies'
+    para['limit'] = 5
+    response = requests_with_caching.get(baseurl, params = para)
+    #print(response.url)
+    print(response.text)
+    return response.json()
+
+def extract_movie_titles(moviedict):
+    titles = []
+    movielist = moviedict['Similar']['Results']
+    for item in movielist:
+        titles.append(item['Name'])
+    print(titles)
+    return titles
+
+def get_related_titles(movielist):
+    relatedlist = []
+    for x in movielist:
+        names = extract_movie_titles(get_movies_from_tastedive(x))
+        if names not in relatedlist:
+            relatedlist.append(names)
+    newlist=list(set(b for a in relatedlist for b in a))
+    print(newlist)
+    return newlist
+
+# get movie ratings
+def get_movie_data(movie):
+    baseurl = 'http://www.omdbapi.com/'
+    para = {}
+    para['t'] = movie
+    para['r'] = 'json'
+    info = requests_with_caching.get(baseurl, params = para)
+    print(info.text)
+    return info.json()
+
+def get_movie_rating(info):
+    rtrating = 0
+    for rating in info['Ratings']:
+        if rating['Source'] == 'Rotten Tomatoes':
+            rtrating = int(rating['Value'].strip('%'))
+    return rtrating  
+
+# combine all together
+def get_sorted_recommendations(movielist2):
+    outputlist = []
+    recmovietitle = get_related_titles(movielist2)
+    for item in recmovietitle:
+        recmovierating = get_movie_rating(get_movie_data(item))
+        outputlist.append((recmovierating, item))
+    sortedlist = sorted(outputlist, key = lambda x: (x[0], x[1]), reverse=True)
+    finallist = [ b for a,b in sortedlist]
+    print(finallist)
+    return finallist
+
+get_sorted_recommendations(["Bridesmaids", "Sherlock Holmes"])
+
+
